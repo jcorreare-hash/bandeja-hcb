@@ -1,5 +1,5 @@
 // Guarda la app para que abra rápido y sin señal. Los datos de la hoja nunca se guardan aquí.
-const VERSION = "bandeja-hcb-v1";
+const VERSION = "bandeja-hcb-v2";
 const ARCHIVOS = ["./", "index.html", "app.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(ARCHIVOS)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => {
