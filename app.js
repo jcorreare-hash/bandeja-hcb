@@ -1,4 +1,4 @@
-/* Bandeja HCB v2: casos de WhatsApp laboral leídos de la hoja de Google a través del puente de Apps Script.
+/* Bandeja HCB v2.1: casos de WhatsApp laboral leídos de la hoja de Google a través del puente de Apps Script.
    La app nunca envía mensajes por sí sola: abre WhatsApp con el texto aprobado y la persona lo envía. */
 (() => {
   "use strict";
@@ -324,7 +324,7 @@
     }
     return state.drafts.get(c.id);
   }
-  function aprobarYEnviar(c) {
+  function aprobarYEnviar(c, abrir = true) {
     const d = draftFor(c);
     const texto = d.text.trim();
     const reenvios = d.fwd.map((r) => ({ para: r.para, telefono: r.telefono, texto: r.texto.trim(), enviar: !!r.enviar, enviado: false }));
@@ -333,8 +333,9 @@
     if (/\[[^\]]+\]/.test(texto)) { toast("Completa lo que está entre corchetes, por ejemplo [fecha]."); return; }
     state.drafts.delete(c.id);
     queue(c.id, { estado: "Aprobado", respuesta: texto, reenvios, nota: d.nota.trim(), aprobado: true, respuesta_enviada: false, pospuesto: "" });
-    const env = enviosDe(state.cases.get(c.id)).find((e) => !e.enviado);
     buzz();
+    if (!abrir) { toast("Aprobado. Queda en «Por enviar» para que Claude lo envíe.", () => queue(c.id, { estado: "Pendiente", aprobado: false })); return; }
+    const env = enviosDe(state.cases.get(c.id)).find((e) => !e.enviado);
     if (env) abrirWhatsApp(c.id, env);
   }
   function marcarEnviado(id, key) {
@@ -539,7 +540,9 @@
 
     const hayEnvio = !!c.destinatario || d.fwd.some((r) => r.enviar);
     const actions = el("div", { class: "actions" });
-    if (hayEnvio) actions.append(el("button", { type: "button", class: "btn wa full", html: WA_ICON + "<span>Aprobar y enviar por WhatsApp</span>", onclick: () => aprobarYEnviar(c) }));
+    if (hayEnvio) actions.append(
+      el("button", { type: "button", class: "btn primary full", text: "Aprobar (lo envía Claude)", onclick: () => aprobarYEnviar(c, false) }),
+      el("button", { type: "button", class: "btn wa full", html: WA_ICON + "<span>Aprobar y enviar yo por WhatsApp</span>", onclick: () => aprobarYEnviar(c, true) }));
     actions.append(
       el("button", { type: "button", class: "btn small", text: "Ya lo resolví", onclick: () => { const nota = d.nota.trim(); state.drafts.delete(c.id); queue(c.id, { estado: "Resuelto", nota, pospuesto: "" }); toast("Marcado como resuelto", () => queue(c.id, { estado: "Pendiente" })); } }),
       el("button", { type: "button", class: "btn small", text: "Posponer", onclick: () => posponer(c) }),
@@ -672,7 +675,10 @@
           : state.tab === "ready" ? "No hay mensajes esperando envío." : "Todavía no hay casos cerrados.";
         const hint = state.tab === "pend" && state.lastSync && !state.buscar ? "Después de cada revisión aparecen aquí los mensajes laborales con la acción sugerida y las respuestas para elegir." : "";
         lista.replaceChildren(el("div", { class: "empty" }, el("strong", { text: msg }), hint ? document.createTextNode(hint) : null));
-      } else lista.replaceChildren(...(state.tab === "closed" ? shown.slice(0, 60) : shown).map(tarjeta));
+      } else {
+        lista.replaceChildren(...(state.tab === "closed" ? shown.slice(0, 60) : shown).map(tarjeta));
+        if (state.tab === "ready") lista.prepend(el("div", { class: "banner info", text: "Para que Claude los envíe todos, escríbele «enviar los aprobados». También puedes abrir cada uno y enviarlo tú." }));
+      }
     }
     renderLista();
     return out;
@@ -859,7 +865,7 @@
     off.hidden = !state.offline && !pg;
     if (!off.hidden) off.textContent = (state.offline ? "Sin conexión con la hoja. " : "") + (pg ? (pg === 1 ? "1 cambio se guardará" : pg + " cambios se guardarán") + " cuando vuelva la señal." : "Mostrando lo último guardado.");
     const ult = state.estado && state.estado.ultima_revision ? "Última revisión: " + when(state.estado.ultima_revision).toLowerCase() + " · " : "";
-    $("last").textContent = ult + "Próxima: " + nextReview();
+    $("last").textContent = (ult ? ult.slice(0, -3) : "Sin revisiones todavía") + " · Pide otra a Claude: «hacer revisión»";
     try { if (navigator.setAppBadge) (pend ? navigator.setAppBadge(pend) : navigator.clearAppBadge()).catch(() => {}); } catch (e) {}
     renderInstall();
   }
